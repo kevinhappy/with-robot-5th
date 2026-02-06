@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<mujoco model="banana_1">
+<mujoco>
   <asset>
   </asset>
   <worldbody>
