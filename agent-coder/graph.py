@@ -13,12 +13,20 @@ from typing import TypedDict, Annotated, Dict
 
 # Load environment variables
 load_dotenv()
+api_key = os.getenv("FIREWORKS_API_KEY")
+if not api_key:
+    print("⚠️ 경고: FIREWORKS_API_KEY를 찾을 수 없습니다. .env 파일을 확인하세요.")
+else:
+    print(f"✅ API Key 로드 성공 (앞 4자리): {api_key[:4]}****")
 
 ROBOT_URL = "http://127.0.0.1:8800"
 
 # Initialize LLM
 llm = ChatFireworks(
-    model="accounts/fireworks/models/qwen3-235b-a22b-instruct-2507",
+    # model="accounts/fireworks/models/qwen3-235b-a22b-instruct-2507",
+    # model="accounts/fireworks/models/qwen2p5-72b-instruct",
+    model="accounts/kevinhappy2-ac59ff/deployments/zm2zrk70",
+    fireworks_api_key=api_key, # 명시적으로 전달
     max_tokens=1000
 )
 

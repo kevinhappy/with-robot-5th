@@ -1,0 +1,6 @@
+*.pyc
+*.env
+/aloha/assets
+/model/aloha/assets
+/model/aloha/model/aloha
+/model/robocasa/assets

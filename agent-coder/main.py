@@ -31,7 +31,10 @@ code_graph = create_graph(code_memory)
 @app.get("/")
 def get_ui() -> HTMLResponse:
     """Get server info."""
-    return HTMLResponse(content=open("ui.html", "r").read())
+    # return HTMLResponse(content=open("ui.html", "r").read())
+    with open("ui.html", "r", encoding="utf-8") as f:
+        html_content = f.read()
+    return HTMLResponse(content=html_content)
 
 
 @app.post("/llm_command")

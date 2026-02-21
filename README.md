@@ -38,7 +38,7 @@ pip install -r requirements.txt
 ```
 
 ### Running the Simulator
-
+#### 에셋 다운로드 받아야 함. model/robocasa/assets 둬야 됨. https://drive.usercontent.google.com/download?id=1dIqsAECBx9uXw9jYwOAdIA01Eg2p4tEg&export=download&authuser=0
 ```bash
 cd robot
 python main.py
