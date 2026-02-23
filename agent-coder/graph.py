@@ -4,16 +4,19 @@ import json
 import requests
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_fireworks import ChatFireworks
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from typing import TypedDict, Annotated, Dict
 
+import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
-api_key = os.getenv("FIREWORKS_API_KEY")
+# api_key = os.getenv("FIREWORKS_API_KEY")
+api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     print("⚠️ 경고: FIREWORKS_API_KEY를 찾을 수 없습니다. .env 파일을 확인하세요.")
 else:
@@ -22,12 +25,24 @@ else:
 ROBOT_URL = "http://127.0.0.1:8800"
 
 # Initialize LLM
-llm = ChatFireworks(
-    # model="accounts/fireworks/models/qwen3-235b-a22b-instruct-2507",
-    # model="accounts/fireworks/models/qwen2p5-72b-instruct",
-    model="accounts/kevinhappy2-ac59ff/deployments/zm2zrk70",
-    fireworks_api_key=api_key, # 명시적으로 전달
-    max_tokens=1000
+# llm = ChatFireworks(
+#     # model="accounts/fireworks/models/qwen3-235b-a22b-instruct-2507",
+#     # model="accounts/fireworks/models/qwen2p5-72b-instruct",
+#     model="accounts/kevinhappy2-ac59ff/deployments/zm2zrk70",
+#     fireworks_api_key=api_key, # 명시적으로 전달
+#     max_tokens=1000
+# )
+
+# genai.configure(api_key=api_key)
+# for m in genai.list_models():
+#     if 'generateContent' in m.supported_generation_methods:
+#         print(m.name)
+
+llm = ChatGoogleGenerativeAI(
+    model="models/gemini-flash-latest",  # 'models/'를 앞에 붙여줍니다.
+    google_api_key=api_key,   # Gemini API Key 전달
+    max_output_tokens=1000,
+    temperature=0.7
 )
 
 # Load code repository once at module initialization
@@ -61,8 +76,11 @@ RESULT["objects"] = objects"""
                         }
                     }}
         response = requests.post(f"{ROBOT_URL}/send_action", json=payload)
+        # print(response)
         objects = response.json()["result"]["objects"]
+        # print(objects)
         objects_str = json.dumps(objects, indent=2)
+        # print(objects_str)
 
         system_prompt = f"""You are a helpful robot assistant.
 
@@ -86,7 +104,16 @@ Generate Python code based on the user's command using the API below.
                                         SystemMessage(content=system_prompt)
                                     ] + state["messages"])
         # Extract code using regex
-        code_match = re.search(r"```(?:python)?\s*(.*?)\s*```", generated_code.content, re.DOTALL)
+        print(generated_code)
+
+        # The 'content' from the LLM can be a string or a list of parts.
+        content_str = ""
+        if isinstance(generated_code.content, list) and len(generated_code.content) > 0:
+            content_str = generated_code.content[0].get("text", "")
+        elif isinstance(generated_code.content, str):
+            content_str = generated_code.content
+
+        code_match = re.search(r"```(?:python)?\s*(.*?)\s*```", content_str, re.DOTALL)
         if code_match:
             generated_code = code_match.group(1).strip()
         
