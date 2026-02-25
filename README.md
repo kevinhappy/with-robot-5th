@@ -1,17 +1,23 @@
 # MuJoCo Robot Simulator API
 
-A REST API-based control system for Panda-Omron mobile manipulator simulation using MuJoCo physics engine. Execute Python code remotely to control a simulated robot in a kitchen environment.
+A REST API-based control system for **'팬다-오므론(Panda-Omron)'** mobile manipulator simulation using MuJoCo physics engine. Execute Python code remotely to control a simulated robot in a kitchen environment.
 
 ## Features
 
 - **Real-time Physics Simulation**: High-fidelity MuJoCo simulation with 3D visualization
 - **REST API Control**: Send Python code via HTTP to control the robot
 - **Sandboxed Execution**: Safe code execution environment with limited access
+  - 샌드박스 (안전한 실행창) 로봇에게 내리는 코드가 시스템 전체를 망가뜨리지 않도록, 정해진 함수만 사용할 수 있는 제한된 환경에서 코드를 실행합니다.
 - **Mobile Base & Arm Control**: Holonomic drive system + 7-DOF Panda arm
 - **Path Planning**: A* algorithm for collision-free navigation with obstacle avoidance
 - **Grid Map**: Binary occupancy grid map for environment perception
+  - Binary Occupancy (이진 점유): 공간을 작은 격자(0.1m 단위)로 나누고, 장애물이 있으면 1(Occupied), 비어 있으면 0(Free)으로 표시합니다.
 - **Gripper Control**: Width-based gripper control for grasping objects
+  - Width-based (너비 기반): 복잡한 각도 계산 대신, 집게 사이의 거리(너비)를 미터(m) 단위로 지정합니다.
+  - Grasping (파지): 예를 들어 사과를 잡으려면 집게를 0.08m로 벌렸다가, 사과 위치에서 0.02m로 좁히는 식으로 명령을 내려 물체를 고정합니다.
 - **End Effector Control**: IK-based position control in world frame
+  - World Frame (세계 좌표계): 로봇 자신을 기준으로 삼지 않고, 주방 전체의 절대적인 좌표(예: x=1.5, y=-3.0, z=1.2)를 사용해 명령을 내립니다.
+  - IK-based (역기능학 기반): 사용자가 "손을 저기(x, y, z)로 보내"라고 하면, 시스템이 자동으로 7개의 팔 관절을 어떻게 꺾어야 할지 수학적으로 계산(Damped Least Squares 방식)합니다.
 - **Object Perception**: Query positions and orientations of all scene objects
 - **PID Controller**: Mobile base with integral term for steady-state error elimination
 - **Synchronous Processing**: Blocking HTTP requests ensure action completion
