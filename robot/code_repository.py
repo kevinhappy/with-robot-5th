@@ -65,9 +65,9 @@ def get_mobile_position() -> List[float]:
 
 
 def set_mobile_target_position(
-    mobile_target_position: List[float],
-    timeout: float = 10.0,
-    verbose: bool = False
+    mobile_target_position: List[float], # [x, y, theta] 형태의 리스트
+    timeout: float = 10.0,               # 최대 대기 시간 (초)
+    verbose: bool = False                # 진행 상황 출력 여부
 ) -> bool:
     """
     Set mobile base target position [x, y, theta] in meters and radians.
@@ -77,26 +77,31 @@ def set_mobile_target_position(
         timeout: Maximum wait time in seconds (default: 60s)
         verbose: Print convergence progress
     """
-    # Update mobile base target position immediately (non-blocking)
+    # 1. Update mobile base target position immediately (non-blocking)
     simulator.set_mobile_target_position(mobile_target_position)
 
     success = True
+    # 2. timeout이 0보다 크면, 로봇이 목표에 도달할 때까지 기다립니다(blocking).
     if success and timeout > 0:
+        # 목표 지점과 현재 위치의 차이(오차)를 계산하는 내부 함수
         def get_mobile_position_diff_weighted() -> np.ndarray:
             diff = simulator.get_mobile_position_diff()
-            diff[-1] /= 2  # Theta weighted at 50%
+            # 각도 오차(theta)는 거리 오차보다 수치가 크게 느껴질 수 있으므로, 
+            # 판정 시 중요도를 50%로 낮추어(2로 나눔) 계산의 균형을 맞춥니다.
+            diff[-1] /= 2  
             return diff
-
+        
+        # 3. _wait_for_convergence: 로봇이 '수렴(정지)'할 때까지 감시하는 함수
         converged = _wait_for_convergence(
-            get_mobile_position_diff_weighted,
-            simulator.get_mobile_velocity,
-            pos_threshold=0.1,
-            vel_threshold=0.05,  # ~0.05 m/s or rad/s
-            timeout=timeout,
-            stable_frames=5,
+            get_mobile_position_diff_weighted, # 위치 오차 측정 함수
+            simulator.get_mobile_velocity,     # 현재 속도 측정 함수
+            pos_threshold=0.1,                 # 위치 오차가 0.1m 이내여야 함
+            vel_threshold=0.05,                # 속도가 0.05m/s 이하로 멈춰야 함
+            timeout=timeout,                   # 이 시간 안에 못 가면 포기
+            stable_frames=5,                   # 찰나의 순간이 아니라 5프레임 동안 정지 상태여야 함
             verbose=verbose
         )
-        success = converged
+        success = converged     # 성공적으로 도착했는지 여부를 반환
     return success
 
 

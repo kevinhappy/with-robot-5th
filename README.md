@@ -20,8 +20,14 @@ A REST API-based control system for **'팬다-오므론(Panda-Omron)'** mobile m
   - IK-based (역기능학 기반): 사용자가 "손을 저기(x, y, z)로 보내"라고 하면, 시스템이 자동으로 7개의 팔 관절을 어떻게 꺾어야 할지 수학적으로 계산(Damped Least Squares 방식)합니다.
 - **Object Perception**: Query positions and orientations of all scene objects
 - **PID Controller**: Mobile base with integral term for steady-state error elimination
+  - Steady-state error elimination (정상 상태 오차 제거): 로봇이 목표 지점 근처에 도달했을 때 미세하게 모자라거나 남는 오차를 'Integral(적분)' 항이 계산하여 끝까지 정확하게 목표점에 맞춥니다.
 - **Synchronous Processing**: Blocking HTTP requests ensure action completion
+  - 명령을 내리면 그 일이 끝날 때까지 기다리는 방식입니다.
+  - Blocking (블로킹): 로봇에게 "방으로 가"라고 API 요청을 보내면, 로봇이 이동을 완료할 때까지 HTTP 연결이 끊기지 않고 유지됩니다.
 - **Adaptive Convergence**: Smart waiting with position + velocity stability checks
+  - 로봇이 "정말로 제대로 도착했는지"를 판단하는 똑똑한 기준입니다. 
+  - Position + Velocity (위치와 속도): 단순히 목표 지점 근처에만 갔다고 끝나는 게 아니라, 로봇의 **움직임(속도)이 거의 멈춘 상태(안정화)**가 수 프레임 동안 유지되어야 "성공"으로 간주합니다.
+  - Smart Waiting: 상황에 따라 대기 시간을 조절하여(0.02초~0.1초) 로봇이 덜덜거리거나 불안정한 상태에서 명령을 종료하지 않도록 방지합니다.
 
 ## Quick Start
 
@@ -95,7 +101,7 @@ Move robot to position (x=0, y=0, theta=π):
 ```python
 set_mobile_target_joint([0, 0, PI])
 ```
-
+  - $\theta$ (Theta): 로봇이 바라보고 있는 **'방향(각도)'**을 의미합니다. 단위는 라디안(Radians)을 사용. 로봇이 2D 평면(바닥) 위에서만 움직이기 때문
 Move robot with verbose output and custom timeout:
 ```python
 set_mobile_target_joint([2.0, 1.0, PI/2], timeout=5.0, verbose=True)
@@ -116,7 +122,7 @@ for pos in positions:
 
 #### Path Planning Example
 
-Plan and execute collision-free path:
+Plan and execute collision-free(충돌없는) path:
 ```python
 # Plan path to target location
 path = plan_mobile_path([2.0, -3.0])

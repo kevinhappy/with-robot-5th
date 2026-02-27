@@ -228,30 +228,32 @@ class MujocoSimulator:
     # ============================================================
     # Mobile Planning Methods
     # ============================================================
-
     def plan_mobile_path(self, target_pos: np.ndarray, simplify: bool = True) -> Optional[List[np.ndarray]]:
         """Plan path for mobile base to reach target position using A* algorithm."""
-        # Ensure target_pos is array-like with 2 elements
+        # A* 알고리즘(A* star algorithm) : 주어진 출발 노드(node)에서부터 목표 노드(node)까지 가는 최단 경로를 찾아내는 그래프 탐색 알고리즘
+        # [1].Ensure target_pos is array-like with 2 elements(x,y)
         target_pos = np.array(target_pos[:2]) if len(target_pos) > 2 else np.array(target_pos)
 
-        grid_size = RobotConfig.GRID_SIZE
+        grid_size = RobotConfig.GRID_SIZE   # 0.1m (10cm) 단위 격자
 
         # Inflate obstacles by robot radius for collision-free planning
+        # [2].장애물 팽창(Inflation): 로봇의 반지름(MOBILE_BASE_RADIUS)만큼 장애물을 부풀립니다.
+        # 로봇은 '점'이 아니라 '부피'가 있기 때문에, 로봇의 중심이 벽에 너무 붙지 않도록 안전거리를 확보하는 과정입니다.
         inflated_map = PathPlanner.inflate_obstacles(
             self.grid_map,
             RobotConfig.MOBILE_BASE_RADIUS,
             grid_size
         )
 
-        # Get current position
-        current_joint = self.get_mobile_position()
-
-        # Convert to grid coordinates
-        start_grid = self._world_to_grid(current_joint[:2], grid_size)
+        # [3].좌표 변환: 실제 세계의 미터(m) 단위를 격자 지도의 인덱스(i, j)로 바꿉니다.
+        current_joint = self.get_mobile_position()                      # Get current position
+        start_grid = self._world_to_grid(current_joint[:2], grid_size)  # Convert to grid coordinates
         goal_grid = self._world_to_grid(target_pos[:2], grid_size)
 
         # Find the closest free cell to target in the INFLATED map
         # This ensures sufficient clearance at the final goal position
+        # [4].목표 지점 유효성 검사: 만약 목적지가 벽 안이나 팽창된 위험 구역에 있다면,
+        # 그 근처에서 가장 가까운 '이동 가능한' 칸을 찾습니다.
         if inflated_map[goal_grid[0], goal_grid[1]] == 1:
             # Target is in obstacle (safety inflated), find nearest free cell along axis
             adjusted_goal = PathPlanner.find_nearest_axial_free_cell(goal_grid, inflated_map)
@@ -263,43 +265,44 @@ class MujocoSimulator:
 
         # Run A* search on inflated map to the adjusted goal
         # This ensures safe path planning while reaching as close as possible
+        # [5].A* 탐색 수행: 부풀려진 지도 위에서 시작점부터 목표점까지의 최단 경로(격자 리스트)를 찾습니다.
         path_grid, closest_point = PathPlanner.astar_search(start_grid, adjusted_goal, inflated_map)
         
         if path_grid is None:
             return None
 
         # Simplify path if requested
+        # [6].경로 단순화 및 부드럽게 만들기 (Post-processing)
         if simplify and len(path_grid) > 2:
-            # First pass: Line-of-sight simplification
+            # First pass: Line-of-sight simplification -불필요한 경유지를 없애고 직선으로 갈 수 있는 곳은 합칩니다.
             path_grid = PathPlanner.simplify_path_line_of_sight(path_grid, inflated_map)
             
-            # Second pass: Angle-based filtering
+            # Second pass: Angle-based filtering - 너무 미세하게 꺾이는 지점들을 제거
             path_grid = PathPlanner.simplify_path_angle_filter(path_grid)
             
-            # Third pass: B-spline smoothing
+            # Third pass: B-spline smoothing - 꺾인 경로를 곡선 형태로 부드럽게 다듬습니다
             path_grid = PathPlanner.smooth_path_bspline(path_grid)
         
         # Convert grid path to world coordinates
+        # [7].격자 좌표를 다시 세계 좌표(m)로 변환하고 로봇의 방향(Theta)을 계산
         path_world = []
         for i, grid_pos in enumerate(path_grid):
             world_xy = self._grid_to_world(grid_pos, grid_size)
             
             # Calculate orientation (theta)
-            if i < len(path_grid) - 1:
-                # Point towards next waypoint
+            if i < len(path_grid) - 1:  # Point towards next waypoint - 다음 지점이 있다면: 다음 지점을 향해 각도를 설정
                 next_xy = self._grid_to_world(path_grid[i + 1], grid_size)
                 theta = np.arctan2(next_xy[1] - world_xy[1], next_xy[0] - world_xy[0])
-            elif i > 0:
-                # Last waypoint: use direction from previous waypoint (natural arrival)
+            elif i > 0:                 # Last waypoint: use direction from previous waypoint (natural arrival)
                 prev_xy = self._grid_to_world(path_grid[i - 1], grid_size)
                 theta = np.arctan2(world_xy[1] - prev_xy[1], world_xy[0] - prev_xy[0])
-            else:
-                # Single waypoint: point towards original target
+            else:                       # Single waypoint: point towards original target - 지점이 하나뿐이라면: 원래 목표 지점을 향함
                 theta = np.arctan2(target_pos[1] - world_xy[1], target_pos[0] - world_xy[0])
             
             path_world.append(np.array([world_xy[0], world_xy[1], theta]))
 
-        # Add final rotation waypoint to face the original target
+        # [8].Add final rotation waypoint to face the original target
+        # 목적지에 도착한 후, 원래 원했던 방향으로 몸을 돌리도록 마지막 웨이포인트를 추가합니다.
         if len(path_world) > 0:
             last_pos = path_world[-1][:2]  # [x, y] of last waypoint
             target_theta = np.arctan2(target_pos[1] - last_pos[1], target_pos[0] - last_pos[0])
@@ -309,52 +312,56 @@ class MujocoSimulator:
 
         return path_world
     
+    # 단순히 "가라"는 명령 외에도, 로봇이 급격하게 회전하다가 경로를 이탈하는 것을 방지하거나, 중간 지점에서는 멈추지 않고 부드럽게 통과하는 등의 제어 노하우가
     def follow_mobile_path(self, path_world: List[np.ndarray], timeout_per_waypoint: float = 30.0, verbose: bool = False) -> bool:
         """Follow a path by sequentially moving to each waypoint."""
         if verbose:
             print(f"Following path with {len(path_world)} waypoints")
         
-        for i, waypoint in enumerate(path_world):
+        for i, waypoint in enumerate(path_world):   # [1]. 경로상의 모든 점(waypoint)을 하나씩 순회
             if verbose:
                 print(f"Moving to waypoint {i+1}/{len(path_world)}: [{waypoint[0]:.2f}, {waypoint[1]:.2f}, {waypoint[2]:.2f}]")
             
-            # Check if this is the last waypoint
+            # Check if this is the last waypoint    
             is_last_waypoint = (i == len(path_world) - 1)
 
             # Get current position
             curr_pos = self.get_mobile_position()
 
-            # Calculate angle difference
-            angle_diff = waypoint[2] - curr_pos[2]
+            # Calculate angle difference            # [2]. 제자리 회전 판단 (Angle Difference)
+            angle_diff = waypoint[2] - curr_pos[2]  # 목표 방향과 현재 방향의 차이를 계산합니다. (-PI ~ PI 범위로 정규화)
             angle_diff = (angle_diff + np.pi) % (2 * np.pi) - np.pi
 
-            if abs(angle_diff) > np.deg2rad(45):
-                rotate_target = curr_pos.copy()
-                rotate_target[2] = waypoint[2]
+            if abs(angle_diff) > np.deg2rad(45):    # 만약 꺾어야 할 각도가 45도(deg2rad(45))보다 크다면,
+                rotate_target = curr_pos.copy()     # 주행하면서 회전하는 대신 '제자리에서 먼저 회전'하여 주행 안정성을 높입니다.
+                rotate_target[2] = waypoint[2]      # 위치는 그대로 두고 방향만 목표 방향으로 설정
                 self.set_mobile_target_position(rotate_target)
 
-                # Wait for rotation to complete
+                # Wait for rotation to complete     # 회전이 완료될 때까지 최대 5초간 대기합니다.
                 start_time = time.time()
                 while time.time() - start_time < 5.0:
                     if np.abs(self.get_mobile_position_diff()[2]) < np.deg2rad(5):
-                        break
+                        break                       # 각도 오차가 5도 이내로 들어오면 회전 완료로 간주
                     time.sleep(0.02)
 
-            self.set_mobile_target_position(waypoint)
+            self.set_mobile_target_position(waypoint)   # [3]. 실제 이동 명령 전달
                       
             # Wait for convergence
             start_time = time.time()
             converged = False
             
+            # [4]. 수렴 대기 (Convergence Check) 루프 : 로봇이 목표점에 충분히 도달했는지 실시간으로 감시
             while time.time() - start_time < timeout_per_waypoint:
                 # Check position and velocity convergence
-                pos_diff = self.get_mobile_position_diff()
-                pos_diff[-1] /= 2  # Theta weighted at 50%
-                pos_error = np.linalg.norm(pos_diff)
-                vel_error = np.linalg.norm(self.get_mobile_velocity())
+                pos_diff = self.get_mobile_position_diff()      # 현재 위치 오차를 계산합니다.
+                pos_diff[-1] /= 2  # Theta weighted at 50%      # 각도(Theta) 오차의 비중을 50%로 낮춰 거리 오차와 밸런스를 맞춤
+                pos_error = np.linalg.norm(pos_diff)            # 오차의 크기(L2 norm)
+                vel_error = np.linalg.norm(self.get_mobile_velocity()) # 현재 이동 속도
                 
-                if is_last_waypoint:
+                if is_last_waypoint:                # [5]. 마지막 지점 vs 중간 지점 판정 기준 차별화 (핵심!)
                     # Last waypoint: Strict stop required
+                    # 마지막 지점: 아주 정확하게 도착해야 하며, '완전히 멈춰야(속도 < 0.05)' 성공입니다.
+                    # "빨간 볼"을 집기 전에는 이 조건이 충족되어야 다음 팔 동작으로 넘어갑니다.
                     if pos_error < 0.05 and vel_error < 0.05:
                         converged = True
                         if verbose:
@@ -362,12 +369,15 @@ class MujocoSimulator:
                         break
                 else:
                     # Intermediate waypoints: Pass through without stopping (no velocity check)
+                    # 중간 지점: 굳이 멈출 필요 없습니다. 근처(0.15m 이내)에만 가면 
+                    # 바로 다음 점으로 명령을 넘겨 로봇이 멈춤 없이 부드럽게 주행하게 합니다. (Fly-through)
                     if pos_error < 0.15:
                         converged = True
                         break
                 
-                time.sleep(0.02)
+                time.sleep(0.02)    # CPU 부하를 줄이기 위한 미세 대기
             
+            # 지정된 시간 내에 웨이포인트에 도달하지 못하면 실패(False)를 반환합니다.
             if not converged:
                 if verbose:
                     print(f"  Timeout at waypoint {i+1} (pos_error={pos_error:.4f}, vel_error={vel_error:.4f})")
@@ -442,49 +452,63 @@ class MujocoSimulator:
         ee_ori = self._rotation_matrix_to_euler_xyz(ee_rot)
         return ee_pos, ee_ori
 
+    # **자코비안(Jacobian)**은 관절의 속도($\dot{q}$)와 손끝(End Effector)의 속도($\dot{x}$) 사이의 관계를 나타내는 행렬입니다. 
+    # 수학적으로는 $\dot{x} = J(q)\dot{q}$로 표현
     def _compute_ee_jacobian(self, data: Optional[mujoco.MjData] = None) -> np.ndarray:
         """Compute 6x7 Jacobian for the end effector site (arm joints only)."""
         if data is None:
             data = self.data
 
-        jacp = np.zeros((3, self.model.nv))
-        jacr = np.zeros((3, self.model.nv))
+        # 1. 빈 자코비안 행렬 초기화
+        jacp = np.zeros((3, self.model.nv))     # 위치(Position)에 대한 3xNV 행렬
+        jacr = np.zeros((3, self.model.nv))     # 회전(Rotation)에 대한 3xNV 행렬 (NV는 시뮬레이션 전체의 자유도 수)
+
+        # 2. MuJoCo 함수를 사용하여 현재 상태에서의 자코비안을 계산
+        # ee_site_id 위치에서의 선속도와 각속도 변화율을 계산합니다.
         mujoco.mj_jacSite(self.model, data, jacp, jacr, self.ee_site_id)
 
-        jacp_arm = jacp[:, self.arm_dof_indices]
-        jacr_arm = jacr[:, self.arm_dof_indices]
+        # 3. 전체 로봇(모바일 베이스 포함) 중 '팔 관절(Arm Joints)'에 해당하는 열만 추출
+        # 이 프로젝트의 로봇은 7자유도 팔을 가지므로, 최종적으로 6x7 행렬이 됩니다.
+        jacp_arm = jacp[:, self.arm_dof_indices] # 위치 관련 (x, y, z)
+        jacr_arm = jacr[:, self.arm_dof_indices] # 회전 관련 (roll, pitch, yaw)
+        
+        # 4. 위치와 회전 자코비안을 위아래로 쌓아서(Stack) 반환
         return np.vstack([jacp_arm, jacr_arm])
 
     def _solve_ik_position(self, target_pos: np.ndarray, max_iterations: Optional[int] = None) -> Tuple[bool, np.ndarray]:
-        """Solve IK for a target position (orientation is kept constant)."""
+        """Solve IK for a target position (orientation is kept constant). (회전(방향)은 현재 상태 유지)"""
         if max_iterations is None:
             max_iterations = RobotConfig.IK_MAX_ITERATIONS
 
-        q = self.get_arm_joint_position().copy()
+        q = self.get_arm_joint_position().copy()    # 1. 현재 팔의 관절 각도를 복사하여 시작점으로 잡음
 
         ik_data = mujoco.MjData(self.model)
-        ik_data.qpos[:] = self.data.qpos[:]
+        ik_data.qpos[:] = self.data.qpos[:]         # 2. 계산용 임시 데이터 생성 (시뮬레이션 본체에 영향을 주지 않기 위함)
 
-        for _ in range(max_iterations):
-            for i, joint_id in enumerate(self.arm_joint_ids):
+        for _ in range(max_iterations):             # 3. 최대 반복 횟수만큼 수치 해석 수행 (Newton-Raphson 유사 방식)
+            for i, joint_id in enumerate(self.arm_joint_ids):   # 임시 데이터에 현재 가설 각도(q)를 적용하고 정기능학(FK) 계산
                 ik_data.qpos[joint_id] = q[i]
             mujoco.mj_forward(self.model, ik_data)
 
             current_pos = ik_data.site_xpos[self.ee_site_id].copy()
-            pos_error = target_pos - current_pos
+            pos_error = target_pos - current_pos    # 4. 현재 손끝 위치와 목표 위치 사이의 오차 계산
 
             if np.linalg.norm(pos_error) < RobotConfig.IK_POSITION_TOLERANCE:
-                return True, q
+                return True, q                      # 5. 오차가 허용 오차(1mm)보다 작으면 성공으로 판정하고 반환
 
-            jacobian = self._compute_ee_jacobian(ik_data)[:3, :]
+            jacobian = self._compute_ee_jacobian(ik_data)[:3, :]    # 6. Damped Least Squares (DLS)를 이용한 관절 업데이트량 계산. # 자코비안의 상단 3행(위치 부분)만 사용
+
+            # 수식: dq = J^T * (J * J^T + λ^2 * I)^-1 * error
+            # λ(IK_DAMPING)는 '댐핑' 계수로, 로봇 팔이 완전히 펴지는 등 
+            # 특이점(Singularity) 근처에서 계산이 폭주하는 것을 막아줍니다.
             jjt = jacobian @ jacobian.T
             damping = (RobotConfig.IK_DAMPING ** 2) * np.eye(jacobian.shape[0])
             inv_term = np.linalg.inv(jjt + damping)
             dq = jacobian.T @ (inv_term @ pos_error)
-            q += RobotConfig.IK_STEP_SIZE * dq
+            q += RobotConfig.IK_STEP_SIZE * dq                      # 7. 관절 각도 업데이트 및 관절 가동 범위(Limit) 제한 적용
             q = np.clip(q, RobotConfig.ARM_JOINT_LIMITS[:, 0], RobotConfig.ARM_JOINT_LIMITS[:, 1])
 
-        return False, q
+        return False, q     # 반복 횟수 내에 수렴하지 못한 경우 실패 반환
     
     def set_ee_target_position(self, target_pos: np.ndarray) -> Tuple[bool, np.ndarray]:
         """Set end effector target position in world frame."""
