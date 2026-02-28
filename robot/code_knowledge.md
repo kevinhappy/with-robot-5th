@@ -12,7 +12,7 @@
 `get_mobile_position()` -> `list[float]`
 Returns current base position `[x, y, theta]`.
 
-`set_mobile_target_position(mobile_target_position, timeout=10.0, verbose=False)` -> `bool`
+`set_mobile_target_position(mobile_target_position, timeout=10.0, verbose=True)` -> `bool`
 Sets target `[x, y, theta]`. Returns `True` if converged.
 
 `plan_mobile_path(target_joint, grid_size=0.1)` -> `list[list[float]] | None`
@@ -21,7 +21,7 @@ Plans A* path to `[x, y]` (world coords). Returns list of `[x, y, theta]` waypoi
 `get_grid_map()` -> `list[list[int]]`
 Returns 2D binary occupancy grid (0=free, 1=occupied). 0.1m cell size.
 
-`follow_mobile_path(path_world, timeout_per_waypoint=30.0, verbose=False)` -> `bool`
+`follow_mobile_path(path_world, timeout_per_waypoint=30.0, verbose=True)` -> `bool`
 Follows path from `plan_mobile_path`.
 
 ## Arm Control
@@ -29,7 +29,7 @@ Follows path from `plan_mobile_path`.
 `get_arm_joint_position()` -> `list[float]`
 Returns 7 joint angles `[j1..j7]` in radians.
 
-`set_arm_target_joint(arm_target_position, timeout=10.0, verbose=False)` -> `bool`
+`set_arm_target_joint(arm_target_position, timeout=10.0, verbose=True)` -> `bool`
 Sets 7 joint angles. Returns `True` if converged.
 
 ## End Effector & Gripper
@@ -37,21 +37,21 @@ Sets 7 joint angles. Returns `True` if converged.
 `get_ee_position()` -> `tuple(list[float], list[float])`
 Returns `([x,y,z], [roll,pitch,yaw])` in world frame.
 
-`set_ee_target_position(target_pos, timeout=10.0, verbose=False)` -> `bool`
+`set_ee_target_position(target_pos, timeout=10.0, verbose=True)` -> `bool`
 Sets EE position `[x, y, z]`. Orientation is not controlled.
 
 `get_gripper_width()` -> `float`
 Returns width in meters.
 
-`set_target_gripper_width(target_width, timeout=10.0, verbose=False)` -> `bool`
+`set_target_gripper_width(target_width, timeout=10.0, verbose=True)` -> `bool`
 Sets width (0.0=closed, 0.08=open).
 
 ## High-Level Operations
 
-`pick_object(object_pos, approach_height=0.1, lift_height=0.2, return_to_home=True, timeout=10.0, verbose=False)` -> `bool`
+`pick_object(object_pos, approach_height=0.1, lift_height=0.2, return_to_home=True, timeout=10.0, verbose=True)` -> `bool`
 Executes pick sequence at `object_pos`.
 
-`place_object(place_pos, approach_height=0.2, retract_height=0.3, return_to_home=True, timeout=10.0, verbose=False)` -> `bool`
+`place_object(place_pos, approach_height=0.2, retract_height=0.3, return_to_home=True, timeout=10.0, verbose=True)` -> `bool`
 Executes place sequence at `place_pos`.
 
 `get_object_positions()` -> `dict`

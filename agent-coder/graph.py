@@ -90,6 +90,7 @@ Generate Python code based on the user's command using the API below.
 {objects_str}
 
 ## Rules
+- Always include `verbose=True` in all function calls to monitor the robot's status.
 - Return ONLY executable Python code in a single generic block used markdown.
 - NO imports allowed (`time`, `math`, `list` are pre-loaded).
 - Use `RESULT` dict for return values.

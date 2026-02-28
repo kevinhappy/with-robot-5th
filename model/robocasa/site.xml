@@ -143,8 +143,8 @@
     </body>
   </worldbody>
 
-  <!-- Kitchen Fixtures: Counters, Cabinets, and Appliances -->
-  <include file="fixtures.xml"/>
+  <!-- Kitchen Fixtures: Counters, Cabinets, and Appliances 이걸 주석하면 조금 더 빨라짐 -->
+  <include file="fixtures.xml"/>  
   
   <!-- Robot System: Panda-Omron Mobile Manipulator -->
   <include file="panda_omron.xml"/>

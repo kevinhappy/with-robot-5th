@@ -313,9 +313,9 @@ class MujocoSimulator:
         return path_world
     
     # 단순히 "가라"는 명령 외에도, 로봇이 급격하게 회전하다가 경로를 이탈하는 것을 방지하거나, 중간 지점에서는 멈추지 않고 부드럽게 통과하는 등의 제어 노하우가
-    def follow_mobile_path(self, path_world: List[np.ndarray], timeout_per_waypoint: float = 30.0, verbose: bool = False) -> bool:
+    def follow_mobile_path(self, path_world: List[np.ndarray], timeout_per_waypoint: float = 300.0, verbose: bool = False) -> bool:
         """Follow a path by sequentially moving to each waypoint."""
-        if verbose:
+        if verbose:     # 상세내용 출력용 변수
             print(f"Following path with {len(path_world)} waypoints")
         
         for i, waypoint in enumerate(path_world):   # [1]. 경로상의 모든 점(waypoint)을 하나씩 순회
@@ -351,6 +351,7 @@ class MujocoSimulator:
             converged = False
             
             # [4]. 수렴 대기 (Convergence Check) 루프 : 로봇이 목표점에 충분히 도달했는지 실시간으로 감시
+            # int ii = 0
             while time.time() - start_time < timeout_per_waypoint:
                 # Check position and velocity convergence
                 pos_diff = self.get_mobile_position_diff()      # 현재 위치 오차를 계산합니다.
@@ -475,6 +476,7 @@ class MujocoSimulator:
         # 4. 위치와 회전 자코비안을 위아래로 쌓아서(Stack) 반환
         return np.vstack([jacp_arm, jacr_arm])
 
+    # 목표 위치에 도달하기 위한 IK 해를 구합니다 (회전은 현재 상태 유지).
     def _solve_ik_position(self, target_pos: np.ndarray, max_iterations: Optional[int] = None) -> Tuple[bool, np.ndarray]:
         """Solve IK for a target position (orientation is kept constant). (회전(방향)은 현재 상태 유지)"""
         if max_iterations is None:
@@ -548,17 +550,17 @@ class MujocoSimulator:
     # ============================================================
     # Pick & Place Methods
     # ============================================================
-
+    # 로봇 팔이 목표한 각도에 정확히 도달해서 멈췄는지 감시하는 "체크포인트" 역할 수행
     def _wait_for_arm_convergence(self, timeout: float = 10.0) -> bool:
         """Wait for arm to converge to target position."""
         start_time = time.time()
         while time.time() - start_time < timeout:
-            pos_error = np.linalg.norm(self.get_arm_joint_diff())
-            vel_error = np.linalg.norm(self.get_arm_joint_velocity())
-            if pos_error < 0.1 and vel_error < 0.1:
-                return True
+            pos_error = np.linalg.norm(self.get_arm_joint_diff())       # 1. 현재 관절 각도와 목표 각도의 차이(오차) 계산
+            vel_error = np.linalg.norm(self.get_arm_joint_velocity())   # 2. 현재 각 관절의 움직임 속도 계산
+            if pos_error < 0.1 and vel_error < 0.1:                     # 3. 판정 기준: 오차가 0.1 라디안 미만이고, 속도가 0.1 미만(거의 정지)일 때
+                return True     # 이 기준이 너무 엄격하면 타임아웃이 나고, 너무 널널하면 팔이 덜덜거릴 때 다음 단계로 넘어갑니다.
             time.sleep(0.02)
-        return False
+        return False            # 시간 내에 멈추지 못하면 실패 반환
 
     def pick_object(
         self, 
@@ -576,10 +578,12 @@ class MujocoSimulator:
         # Step 1: Open gripper
         if verbose:
             print("  Step 1: Opening gripper...")
-        self.set_target_gripper_width(0.08)
-        time.sleep(1.0)
+        self.set_target_gripper_width(0.08)         # 물체를 잡기 전 방해되지 않도록 최대 너비(0.08m)로 벌립
+        time.sleep(1.0)                             # 집게가 완전히 벌어질 물리적 시간
         
         # Step 2: Move to approach position (above object)
+        # 물체 바로 위(object_pos + approach_height)로 팔을 보냅니다.
+        # 바로 옆에서 들어가면 물체를 쳐서 날려버릴 수 있기 때문에 위에서 아래로 접근합니다.
         approach_pos = np.array([object_pos[0], object_pos[1], object_pos[2] + approach_height])
         if verbose:
             print(f"  Step 2: Moving to approach position (height: {approach_height:.3f}m above object)...")
@@ -594,7 +598,7 @@ class MujocoSimulator:
                 print("  Timeout waiting for approach position")
             return False
         
-        # Step 3: Lower to grasp position
+        # Step 3: Lower to grasp position   물체의 실제 높이로 팔을 천천히 내립니다.
         grasp_pos = np.array([object_pos[0], object_pos[1], object_pos[2]])
         if verbose:
             print(f"  Step 3: Lowering to grasp position...")
@@ -612,10 +616,10 @@ class MujocoSimulator:
         # Step 4: Close gripper to grasp
         if verbose:
             print("  Step 4: Closing gripper to grasp...")
-        self.set_target_gripper_width(0.02)
+        self.set_target_gripper_width(0.02)     # 집게를 0.02m(2cm)까지 오므립니다.
         time.sleep(1.5)  # Wait for gripper to close and stabilize
         
-        # Step 5: Lift object
+        # Step 5: Lift object   lift_height 만큼 물체 올리기
         lift_pos = np.array([object_pos[0], object_pos[1], object_pos[2] + lift_height])
         if verbose:
             print(f"  Step 5: Lifting object (height: {lift_height:.3f}m above original position)...")
@@ -630,7 +634,7 @@ class MujocoSimulator:
                 print("  Timeout waiting for lift position")
             return False
         
-        # Step 6: Return to home position (optional)
+        # Step 6: Return to home position (optional)    홈 위치로 복귀 (옵션)
         if return_to_home:
             if verbose:
                 print("  Step 6: Returning arm to home position...")
@@ -645,7 +649,7 @@ class MujocoSimulator:
             print("  Pick sequence completed successfully!")
         return True
     
-    def place_object(
+    def place_object(   # 물체를 놓는 과정은 집는 과정의 역순이지만, 놓은 직후 팔을 치울 때 물체를 건드리지 않는 것이 핵심
         self,
         place_pos: np.ndarray,
         approach_height: float = 0.2,
@@ -658,7 +662,7 @@ class MujocoSimulator:
         if verbose:
             print(f"Starting place sequence at position [{place_pos[0]:.3f}, {place_pos[1]:.3f}, {place_pos[2]:.3f}]")
         
-        # Step 1: Move to approach position (above placement location)
+        # Step 1: Move to approach position (above placement location) # 바구니 바닥에 닿기 전, 공중에서 위치를 먼저 잡습니다.
         approach_pos = np.array([place_pos[0], place_pos[1], place_pos[2] + approach_height])
         if verbose:
             print(f"  Step 1: Moving to approach position (height: {approach_height:.3f}m above target)...")
@@ -673,13 +677,13 @@ class MujocoSimulator:
                 print("  Timeout waiting for approach position")
             return False
         
-        # Step 2: Open gripper to release
+        # Step 2: Open gripper to release   집게를 벌려 물체를 자유 낙하시키거나 바닥에 놓습니다.
         if verbose:
             print("  Step 2: Opening gripper to release object...")
-        self.set_target_gripper_width(0.08)
+        self.set_target_gripper_width(0.08) 
         time.sleep(1.5)  # Wait for gripper to open and object to settle
         
-        # Step 3: Retract upward
+        # Step 3: Retract upward    물체를 놓은 후 팔을 위로 쑥 빼서 물체나 바구니와의 간섭을 피함
         retract_pos = np.array([place_pos[0], place_pos[1], place_pos[2] + retract_height])
         if verbose:
             print(f"  Step 3: Retracting (height: {retract_height:.3f}m above placement)...")
