@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "discord": {
+      "command": "cmd",
+      "args": ["/c", "D:\\git\\with-robot-5th\\discord_bot.bat"]
+    }
+  }
+}
