@@ -104,10 +104,13 @@ Start the server which provides a web UI and REST API:
 ```bash
 # Install dependencies
 conda env create -f environment.yml
-conda activate robot_agent
+conda activate robot
 
-# Ensure simulator is running at http://127.0.0.1:8800
-# Start the API server
+# Set OPENAI_API_KEY (and optionally ELEVENLABS_API_KEY) in a .env file
+cp .env.example .env
+
+# The server starts without the simulator, but /llm_command needs it
+# running at http://127.0.0.1:8800
 python main.py
 ```
 
