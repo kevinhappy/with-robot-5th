@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Dict
 
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
@@ -16,20 +17,34 @@ from .state import StateSchema
 
 StateCallable = Callable[[Any], Any]
 
+# OpenRouter exposes an OpenAI-compatible Chat Completions API, so we keep
+# using ChatOpenAI and just repoint it at OpenRouter's base_url with an
+# OpenRouter API key. (The `openrouter` PyPI package is a raw API client, not
+# a LangChain chat model / Runnable, so it can't be dropped into `prompt | llm`.)
+_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
 
 def create_llm(
-    model_name: ModelNames,
+    model_name: ModelNames | str,
     temperature: float | None = None,
     prompt_cache_key: str | None = None,
 ):
+    model_value = model_name.value if isinstance(model_name, ModelNames) else model_name
+
     extra_body: Dict[str, Any] | None = None
     if prompt_cache_key:
         extra_body = {"prompt_cache_key": prompt_cache_key}
-    llm_kwargs: Dict[str, Any] = {"model": model_name.value}
+    llm_kwargs: Dict[str, Any] = {"model": model_value}
     if temperature is not None:
         llm_kwargs["temperature"] = temperature
     if extra_body:
         llm_kwargs["extra_body"] = extra_body
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY")
+    if openrouter_key:
+        llm_kwargs["api_key"] = openrouter_key
+        llm_kwargs["base_url"] = _OPENROUTER_BASE_URL
+
     return ChatOpenAI(**llm_kwargs)
 
 
@@ -82,13 +97,18 @@ def make_llm_node(
     return node
 
 
-def _resolve_model_enum(model_name: ModelNames | str) -> ModelNames:
+def _resolve_model_enum(model_name: ModelNames | str) -> ModelNames | str:
     if isinstance(model_name, ModelNames):
         return model_name
     try:
         return ModelNames(model_name)
     except ValueError:
+        pass
+    if model_name in ModelNames.__members__:
         return ModelNames[model_name]
+    # Not one of our known OpenAI model aliases - assume it's a provider model
+    # id passed straight through (e.g. an OpenRouter "vendor/model" string).
+    return model_name
 
 
 def create_graph(config):

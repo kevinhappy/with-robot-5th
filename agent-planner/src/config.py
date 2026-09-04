@@ -39,11 +39,13 @@ config = Config(
     ),
     runner=RunnerConfig(
         goal_decomp_node=NodeConfig(
-            model_name="gpt41mini",
+            # model_name="gpt41mini",
+            model_name="deepseek/deepseek-v4-flash-latest",
             prompt_cache_key="goal_decomp_node",
         ),
         task_decomp_node=NodeConfig(
-            model_name="gpt41mini",
+            model_name="deepseek/deepseek-v4-flash-latest",
+            # model_name="gpt41mini",
             prompt_cache_key="task_decomp_node",
         ),
     ),

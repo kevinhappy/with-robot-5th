@@ -118,11 +118,22 @@ The server runs at `http://0.0.0.0:8900`:
 - `/`: Web UI (ui.html)
 - `/llm_command`: POST endpoint for command processing
 
-Example request:
+Example request (bash / macOS / Linux):
 ```bash
 curl -X POST "http://localhost:8900/llm_command" \
   -H "Content-Type: application/json" \
   -d '{"command": "Organize the objects to the bowls according to their colors"}'
+```
+
+Example request (Windows PowerShell): PowerShell aliases `curl` to `Invoke-WebRequest`,
+which does not understand `-X`/`-H`/`-d` the same way, and it has no line-continuation
+backslash — copy-pasting the bash command above fails there. Use one of these instead:
+```powershell
+# Option A: real curl.exe (bundled with Windows 10/11), single line, JSON quotes escaped
+curl.exe -X POST "http://localhost:8900/llm_command" -H "Content-Type: application/json" -d '{\"command\": \"Organize the objects to the bowls according to their colors\"}'
+
+# Option B: native PowerShell cmdlet
+Invoke-RestMethod -Uri "http://localhost:8900/llm_command" -Method Post -ContentType "application/json" -Body '{"command": "Organize the objects to the bowls according to their colors"}'
 ```
 
 ### Option 2: Programmatic Usage
